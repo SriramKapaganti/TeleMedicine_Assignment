@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: amrutam-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: amrutam_db
+      POSTGRES_USER: amrutam_user
+      POSTGRES_PASSWORD: amrutam_secure_password_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amrutam_user -d amrutam_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - amrutam-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: amrutam-redis
+    restart: always
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - amrutam-net
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: amrutam-api
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: amrutam_db
+      DB_USER: amrutam_user
+      DB_PASSWORD: amrutam_secure_password_2026
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_ACCESS_SECRET: amrutam_super_secret_jwt_access_key_min_32_chars_2026!
+      JWT_REFRESH_SECRET: amrutam_super_secret_jwt_refresh_key_min_32_chars_2026!
+      ENCRYPTION_KEY_CURRENT_VERSION: v1
+      ENCRYPTION_KEY_V1: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      PAYMENT_WEBHOOK_SECRET: whsec_amrutam_payment_webhook_secret_key_2026
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - amrutam-net
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: amrutam-worker
+    restart: always
+    command: ["node", "src/jobs/worker.js"]
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: amrutam_db
+      DB_USER: amrutam_user
+      DB_PASSWORD: amrutam_secure_password_2026
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      ENCRYPTION_KEY_CURRENT_VERSION: v1
+      ENCRYPTION_KEY_V1: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - amrutam-net
+
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    container_name: amrutam-prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - amrutam-net
+
+  grafana:
+    image: grafana/grafana:10.3.0
+    container_name: amrutam-grafana
+    restart: always
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=amrutam_admin_2026
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./infra/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./infra/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - amrutam-net
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  amrutam-net:
+    driver: bridge

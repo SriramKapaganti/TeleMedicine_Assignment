@@ -1,0 +1,409 @@
+openapi: 3.0.3
+info:
+  title: Amrutam Telemedicine API
+  description: Production-grade backend for Amrutam's Telemedicine System focusing on scalability, reliability, security, and observability.
+  version: 1.0.0
+servers:
+  - url: /api/v1
+    description: Current Base API Version
+
+paths:
+  /auth/register:
+    post:
+      summary: Register a new patient, doctor, or admin
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, fullName]
+              properties:
+                email:
+                  type: string
+                  format: email
+                phone:
+                  type: string
+                password:
+                  type: string
+                  minLength: 8
+                fullName:
+                  type: string
+                role:
+                  type: string
+                  enum: [PATIENT, DOCTOR, ADMIN]
+                  default: PATIENT
+      responses:
+        '201':
+          description: User successfully registered
+
+  /auth/login:
+    post:
+      summary: Login user with credentials and optional MFA
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+                mfaCode:
+                  type: string
+      responses:
+        '200':
+          description: Successfully authenticated
+
+  /auth/refresh:
+    post:
+      summary: Rotate refresh token
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: New access and refresh token pair
+
+  /auth/mfa/setup:
+    post:
+      summary: Initiate TOTP MFA setup
+      security:
+        - BearerAuth: []
+      tags: [Auth]
+      responses:
+        '200':
+          description: MFA secret and OTPAuth URI
+
+  /auth/mfa/verify:
+    post:
+      summary: Verify TOTP token and activate MFA
+      security:
+        - BearerAuth: []
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  minLength: 6
+                  maxLength: 6
+      responses:
+        '200':
+          description: MFA verified and activated
+
+  /doctors:
+    get:
+      summary: Search and filter doctors (cached in Redis)
+      tags: [Doctors]
+      parameters:
+        - name: specialization
+          in: query
+          schema:
+            type: string
+        - name: minRating
+          in: query
+          schema:
+            type: number
+        - name: maxFee
+          in: query
+          schema:
+            type: number
+        - name: q
+          in: query
+          description: Fuzzy name search
+          schema:
+            type: string
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Filtered doctor list
+    post:
+      summary: Doctor onboarding
+      security:
+        - BearerAuth: []
+      tags: [Doctors]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [specialization, licenseNo, consultationFee]
+              properties:
+                specialization:
+                  type: string
+                licenseNo:
+                  type: string
+                experienceYrs:
+                  type: integer
+                consultationFee:
+                  type: number
+                bio:
+                  type: string
+      responses:
+        '201':
+          description: Doctor onboarded
+
+  /doctors/{id}:
+    get:
+      summary: Get doctor profile details
+      tags: [Doctors]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Doctor profile
+
+  /doctors/{id}/slots:
+    get:
+      summary: Get available slots for doctor
+      tags: [Availability]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: date
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Availability slots
+    post:
+      summary: Bulk create availability slots
+      security:
+        - BearerAuth: []
+      tags: [Availability]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slots]
+              properties:
+                slots:
+                  type: array
+                  items:
+                    type: object
+                    required: [startTime, endTime]
+                    properties:
+                      startTime:
+                        type: string
+                        format: date-time
+                      endTime:
+                        type: string
+                        format: date-time
+      responses:
+        '201':
+          description: Slots created
+
+  /consultations:
+    post:
+      summary: Book a consultation (atomic, idempotent)
+      security:
+        - BearerAuth: []
+      tags: [Consultations]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [doctorId, slotId]
+              properties:
+                doctorId:
+                  type: string
+                  format: uuid
+                slotId:
+                  type: string
+                  format: uuid
+                reason:
+                  type: string
+      responses:
+        '201':
+          description: Consultation booked and slot held for 10 minutes
+        '409':
+          description: Slot conflict or concurrent idempotency lock
+    get:
+      summary: List user consultations
+      security:
+        - BearerAuth: []
+      tags: [Consultations]
+      responses:
+        '200':
+          description: Consultations list
+
+  /consultations/{id}/cancel:
+    post:
+      summary: Cancel consultation and release slot
+      security:
+        - BearerAuth: []
+      tags: [Consultations]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Cancelled successfully
+
+  /consultations/{id}/prescriptions:
+    post:
+      summary: Issue prescription for consultation (AES-256-GCM encrypted)
+      security:
+        - BearerAuth: []
+      tags: [Prescriptions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [medicines]
+              properties:
+                medicines:
+                  type: array
+                  items:
+                    type: object
+                    required: [name, dosage, frequency, duration]
+                    properties:
+                      name: { type: string }
+                      dosage: { type: string }
+                      frequency: { type: string }
+                      duration: { type: string }
+                      instructions: { type: string }
+                instructions:
+                  type: string
+      responses:
+        '201':
+          description: Prescription issued
+
+  /payments/webhook:
+    post:
+      summary: Payment provider webhook (HMAC signature-verified, idempotent)
+      tags: [Payments]
+      parameters:
+        - name: x-signature
+          in: header
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event, providerRef, consultationId, amount]
+              properties:
+                event:
+                  type: string
+                  enum: [payment.success, payment.failed]
+                providerRef:
+                  type: string
+                consultationId:
+                  type: string
+                  format: uuid
+                amount:
+                  type: number
+      responses:
+        '200':
+          description: Webhook processed
+
+  /health/live:
+    get:
+      summary: Liveness probe
+      tags: [Observability]
+      responses:
+        '200':
+          description: Service alive
+
+  /health/ready:
+    get:
+      summary: Readiness probe (DB & Redis status)
+      tags: [Observability]
+      responses:
+        '200':
+          description: Ready
+        '503':
+          description: Degraded / Unavailable
+
+  /metrics:
+    get:
+      summary: Prometheus scrape metrics endpoint
+      tags: [Observability]
+      responses:
+        '200':
+          description: Prometheus formatted metrics
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
