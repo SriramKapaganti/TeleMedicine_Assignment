@@ -25,16 +25,23 @@ const defaultJobOptions = {
 
 if (process.env.NODE_ENV !== 'test') {
   try {
-    const connection = {
-      host: redisOptions.host,
-      port: redisOptions.port,
-      password: redisOptions.password,
-      db: redisOptions.db,
-    };
+    const connection = redisOptions.url
+      ? { url: redisOptions.url, ...(redisOptions.tls ? { tls: redisOptions.tls } : {}) }
+      : {
+          host: redisOptions.host,
+          port: redisOptions.port,
+          password: redisOptions.password,
+          db: redisOptions.db,
+          ...(redisOptions.tls ? { tls: redisOptions.tls } : {}),
+        };
 
     bookingQueue = new Queue('booking-queue', { connection, defaultJobOptions });
     notificationQueue = new Queue('notification-queue', { connection, defaultJobOptions });
     analyticsQueue = new Queue('analytics-queue', { connection, defaultJobOptions });
+
+    bookingQueue.on('error', (err) => logger.warn({ err: err.message }, '[QUEUE:BOOKING] Queue connection warning'));
+    notificationQueue.on('error', (err) => logger.warn({ err: err.message }, '[QUEUE:NOTIFICATION] Queue connection warning'));
+    analyticsQueue.on('error', (err) => logger.warn({ err: err.message }, '[QUEUE:ANALYTICS] Queue connection warning'));
 
     logger.info('[QUEUE] BullMQ queues initialized');
   } catch (err) {

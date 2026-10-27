@@ -4,18 +4,27 @@ const { Pool } = require('pg');
 const config = require('./index');
 const logger = require('./logger');
 
-const pool = new Pool({
-  host: config.DB_HOST,
-  port: config.DB_PORT,
-  database: config.DB_NAME,
-  user: config.DB_USER,
-  password: config.DB_PASSWORD,
-  min: config.DB_POOL_MIN,
-  max: config.DB_POOL_MAX,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-  ssl: config.DB_SSL ? { rejectUnauthorized: false } : false,
-});
+const pool = config.DATABASE_URL
+  ? new Pool({
+      connectionString: config.DATABASE_URL,
+      min: config.DB_POOL_MIN,
+      max: config.DB_POOL_MAX,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+      ssl: { rejectUnauthorized: false },
+    })
+  : new Pool({
+      host: config.DB_HOST,
+      port: config.DB_PORT,
+      database: config.DB_NAME,
+      user: config.DB_USER,
+      password: config.DB_PASSWORD,
+      min: config.DB_POOL_MIN,
+      max: config.DB_POOL_MAX,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+      ssl: config.DB_SSL ? { rejectUnauthorized: false } : false,
+    });
 
 pool.on('error', (err) => {
   logger.error({ err }, '[DATABASE] Unexpected error on idle client');

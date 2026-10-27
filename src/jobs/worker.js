@@ -7,12 +7,15 @@ const { processSlotExpiry } = require('./slotExpiry.job');
 const { processNotification } = require('./notification.job');
 const { processAnalyticsRollup } = require('./analyticsRollup.job');
 
-const connection = {
-  host: redisOptions.host,
-  port: redisOptions.port,
-  password: redisOptions.password,
-  db: redisOptions.db,
-};
+const connection = redisOptions.url
+  ? { url: redisOptions.url, ...(redisOptions.tls ? { tls: redisOptions.tls } : {}) }
+  : {
+      host: redisOptions.host,
+      port: redisOptions.port,
+      password: redisOptions.password,
+      db: redisOptions.db,
+      ...(redisOptions.tls ? { tls: redisOptions.tls } : {}),
+    };
 
 logger.info('[WORKER] Starting BullMQ background workers...');
 

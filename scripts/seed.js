@@ -1,23 +1,31 @@
 'use strict';
 
+require('dotenv').config();
 const { Pool } = require('pg');
 const { hashPassword } = require('../src/utils/password');
 const { encrypt } = require('../src/utils/crypto');
-require('dotenv').config();
 
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432', 10),
-  database: process.env.DB_NAME || 'amrutam_db',
-  user: process.env.DB_USER || 'amrutam_user',
-  password: process.env.DB_PASSWORD || 'amrutam_secure_password_2026',
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-});
+const pool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 10000,
+    })
+  : new Pool({
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432', 10),
+      database: process.env.DB_NAME || 'amrutam_db',
+      user: process.env.DB_USER || 'amrutam_user',
+      password: process.env.DB_PASSWORD || 'amrutam_secure_password_2026',
+      ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+      connectionTimeoutMillis: 10000,
+    });
 
 async function seed() {
+  console.log('[SEED] Connecting to database...');
   const client = await pool.connect();
   try {
-    console.log('[SEED] Seeding database with initial test data...');
+    console.log('[SEED] Connected. Seeding database with initial test data...');
     await client.query('BEGIN');
 
     // 1. Specializations

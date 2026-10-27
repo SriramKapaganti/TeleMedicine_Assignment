@@ -5,14 +5,19 @@ const path = require('path');
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432', 10),
-  database: process.env.DB_NAME || 'amrutam_db',
-  user: process.env.DB_USER || 'amrutam_user',
-  password: process.env.DB_PASSWORD || 'amrutam_secure_password_2026',
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-});
+const pool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+    })
+  : new Pool({
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432', 10),
+      database: process.env.DB_NAME || 'amrutam_db',
+      user: process.env.DB_USER || 'amrutam_user',
+      password: process.env.DB_PASSWORD || 'amrutam_secure_password_2026',
+      ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    });
 
 async function runMigrations() {
   const client = await pool.connect();

@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: amrutam-telemedicine-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY_CURRENT_VERSION
+        value: v1
+      - key: ENCRYPTION_KEY_V1
+        value: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      - key: PAYMENT_WEBHOOK_SECRET
+        generateValue: true
